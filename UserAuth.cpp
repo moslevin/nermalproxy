@@ -41,7 +41,7 @@ AuthManager& AuthManager::Instance() {
     return *instance;
 }
 
-bool AuthManager::SetEnabled(bool enable) {
+void AuthManager::SetEnabled(bool enable) {
     m_enabled = enable;
 }
 
@@ -62,15 +62,22 @@ void AuthManager::AddUserIp(const std::string& username, const std::string& ipAd
 }
 
 bool AuthManager::AuthenticateIp(const std::string& ipAddress, std::string& username) {
+    Log(LogSeverity::Debug, "%s: enter", __func__);
     for (auto& user: m_users) {
+        Log(LogSeverity::Debug, "%s: User=%s", __func__, user.GetName().c_str());
         if (user.HasIpList()) {
+            Log(LogSeverity::Debug, "%s: ... has an IP list", __func__);
             auto ipList = user.GetIpList();
-            for (auto& ip: ipList) {
+            for (auto& ip : ipList) {
+                Log(LogSeverity::Debug, "%s: Check IP=%s", __func__, ip.c_str());
                 if (ip == ipAddress) {
+                    Log(LogSeverity::Debug, "%s: Match -- auth by IP Ok", __func__, ip.c_str());
                     username = user.GetName();
                     return true;
                 }
             }
+        } else {
+            Log(LogSeverity::Debug, "%s: ... has no IP list", __func__);
         }
     }
     return false;

@@ -25,7 +25,7 @@ class AuthManager {
 public:
     static AuthManager& Instance();
 
-    bool SetEnabled(bool enable);
+    void SetEnabled(bool enable);
     bool IsEnabled();
     void AddUser(const std::string& user, const std::string& password);
     void AddUserIp(const std::string& user, const std::string& ip);

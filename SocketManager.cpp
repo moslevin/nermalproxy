@@ -214,6 +214,8 @@ bool SocketManager::ProcessSockets() {
                                         // Check IP Address - see if it's in whitelist.
                                         auto& clientIp = session->GetClientAddress();
                                         auto username = std::string{};
+                                        Log(LogSeverity::Debug, "Attempt authentication via IP");
+
                                         if (AuthManager::Instance().AuthenticateIp(clientIp, username)) {
                                             Log(LogSeverity::Debug, "Authenticated as %s via IP", username.c_str());
                                             session->SetUserName(username);
