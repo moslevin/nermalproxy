@@ -16,7 +16,7 @@
 #include "Session.hpp"
 #include "UserAuth.hpp"
 #include "Log.hpp"
-#include "Blacklist.hpp"
+#include "BlackList.hpp"
 #include "Policy.hpp"
 
 using ThreadFunc = void (*)(void* context);

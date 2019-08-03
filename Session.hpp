@@ -10,88 +10,40 @@
 
 class Session {
 public:
-    Session(const int clientFd, const int sessionId)
-        : m_clientFd{clientFd}
-        , m_sessionId{sessionId}
-    {
-        m_timestamp = Timestamp();
-    }
+    Session(const int clientFd, const int sessionId);
+    int GetSessionId();
+    int GetClientFd();
 
-    int GetSessionId() {
-        return m_sessionId;
-    }
+    void SetRequest(std::string& request);
+    std::string GetRequest();
+    void SetHost(std::string& host);
 
-    int GetClientFd() {
-        return m_clientFd;
-    }
+    std::string GetHost();
 
-    void SetRequest(std::string& request) {
-        m_request = request;
-    }
+    void SetPort(std::uint16_t port);
 
-    std::string GetRequest() {
-        return m_request;
-    }
+    std::uint16_t GetPort();
 
-    void SetHost(std::string& host) {
-        m_hostUrl = host;
-    }
+    void SetTransparent(const bool transparent);
 
-    std::string GetHost() {
-        return m_hostUrl;
-    }
+    bool GetTransparent();
 
-    void SetPort(std::uint16_t port) {
-        m_port = port;
-    }
+    void SetClientAddress(const std::string& ipAddress);
 
-    std::uint16_t GetPort() {
-        return m_port;
-    }
+    const std::string& GetClientAddress();
+    void SetUserName(const std::string& userName);
 
-    void SetTransparent(const bool transparent) {
-        m_transparent = transparent;
-    }
+    const std::string& GetUserName();
 
-    bool GetTransparent() {
-        return m_transparent;
-    }
+    void AddRxBytes(size_t bytes);
 
-    void SetClientAddress(const std::string& ipAddress) {
-        m_clientIp = ipAddress;
-    }
+    void AddTxBytes(size_t bytes);
 
-    const std::string& GetClientAddress() {
-        return m_clientIp;
-    }
+    std::uint64_t GetRxBytes();
 
-    void SetUserName(const std::string& userName) {
-        m_userName = userName;
-    }
+    std::uint64_t GetTxBytes();
 
-    const std::string& GetUserName() {
-        return m_userName;
-    }
-
-    void AddRxBytes(size_t bytes) {
-        m_clientRxBytes += bytes;
-    }
-
-    void AddTxBytes(size_t bytes) {
-        m_clientTxBytes += bytes;
-    }
-
-    std::uint64_t GetRxBytes() {
-        return m_clientRxBytes;
-    }
-
-    std::uint64_t GetTxBytes() {
-        return m_clientTxBytes;
-    }
-
-    std::uint64_t GetTimestamp() {
-        return m_timestamp;
-    }
+    std::uint64_t GetTimestamp();
 
 private:
     int m_sessionId;
@@ -114,60 +66,15 @@ private:
 
 class SessionManager {
 public:
-    static SessionManager& Instance() {
-        static SessionManager* instance = new SessionManager;
-        return *instance;
-    }
+    static SessionManager& Instance();
 
-    Session* CreateSession(const int clientFd) {
-        {
-            auto lg = LockGuard{m_lock};
+    Session* CreateSession(const int clientFd);
 
-            m_sessionList.emplace_back(Session{clientFd, m_sessionId++});
-        }
-        return GetSessionForClient(clientFd);
-    }
+    Session* GetSessionForClient(const int clientFd);
 
-    Session* GetSessionForClient(const int clientFd) {
-        auto lg = LockGuard{m_lock};
+    Session* GetSession(const int sessionId);
 
-        for (auto it = m_sessionList.begin(); it != m_sessionList.end(); it++) {
-            if (it->GetClientFd() == clientFd) {
-                return &(*it);
-            }
-        }
-        return nullptr;
-    }
-
-    Session* GetSession(const int sessionId) {
-        auto lg = LockGuard{m_lock};
-
-        for (auto it = m_sessionList.begin(); it != m_sessionList.end(); it++) {
-            if (it->GetSessionId() == sessionId) {
-                return &(*it);
-            }
-        }
-        return nullptr;
-    }
-
-    void EndSession(const int sessionId) {
-        auto lg = LockGuard{m_lock};
-
-        for (auto it = m_sessionList.begin(); it != m_sessionList.end(); it++) {
-            if (it->GetSessionId() == sessionId) {
-                if (it->GetHost() != "") {
-                    // Add stats to global stats table.
-                    auto& stats = GlobalStats::Instance().GetStats(it->GetUserName(), it->GetHost());
-                    stats.AddConnectionTime(Timestamp() - it->GetTimestamp());
-                    stats.AddRxBytes(it->GetRxBytes());
-                    stats.AddTxBytes(it->GetTxBytes());
-                    stats.IncrementConnections();
-                    m_sessionList.erase(it);
-                }
-                return;
-            }
-        }
-    }
+    void EndSession(const int sessionId);
 
 private:
     using LockGuard = std::unique_lock<std::mutex>;

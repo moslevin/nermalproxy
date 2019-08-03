@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include "AsyncMessenger.hpp"
+#include "BlackList.hpp"
 #include "ClientSocket.hpp"
 #include "CommandSocket.hpp"
 #include "HostInfoManager.hpp"
@@ -17,7 +18,7 @@
 #include "SocketManager.hpp"
 #include "Timestamp.hpp"
 #include "UserAuth.hpp"
-#include "Blacklist.hpp"
+#include "BlackList.hpp"
 #include "ConfigFile.hpp"
 #include "Policy.hpp"
 
@@ -143,6 +144,12 @@ void DoConfig() {
             auto ipIdx = 0;
             while (ipAttr.GetValue(ipIdx++, ipValue)) {
                 AuthManager::Instance().AddUserIp(attr->GetName(), ipValue);
+            }
+
+            auto& auditAttr = policyConfig.GetAttribute("audit");
+            if (auditAttr.GetValue() == "enabled") {
+                Log(LogSeverity::Debug, "Auditing enabled for user: %s", attr->GetName().c_str());
+                AuthManager::Instance().SetAudit(attr->GetName(), true);
             }
 
             // Move policy to the global policy list.

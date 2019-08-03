@@ -1,20 +1,36 @@
 #include "UserAuth.hpp"
 
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
 #include <string>
 #include <string.h>
 #include <list>
 #include <vector>
 
 #include "Log.hpp"
+#include "Timestamp.hpp"
+
+namespace {
+int s_logNumber = 0;
+
+} // anonymous namespace
 
 User::User(const std::string& name, const std::string& password)
     : m_name{std::move(name)}
     , m_password{std::move(password)}
     , m_ipList{}
+    , m_audit{false}
 {}
 
 void User::AddIp(const std::string& ipAddress) {
     m_ipList.emplace_back(ipAddress);
+}
+
+void User::SetAudit(bool audit) {
+    m_audit = audit;
 }
 
 const std::string& User::GetName() const {
@@ -49,6 +65,18 @@ bool AuthManager::IsEnabled() {
     return m_enabled;
 }
 
+bool AuthManager::IsAuditEnabled(const std::string &username) {
+
+}
+
+void AuthManager::SetAudit(const std::string& username, bool audit)
+{
+    for (auto& user: m_users) {
+        if (user.GetName() == username) {
+            user.SetAudit(audit);
+        }
+    }
+}
 void AuthManager::AddUser(const std::string& user, const std::string& password) {
     m_users.emplace_back(User{user, password});
 }
@@ -239,18 +267,61 @@ SiteStats& UserStats::GetStats(const std::string& host) {
     return m_stats.back();
 }
 
+void SiteStats::LogToFile(int fd) const {
+    char tmpBuf[1024];
+    snprintf(tmpBuf, 1024, "%s,%lu,%lu,%lu,%d\n",
+             m_hostName.c_str(),
+             m_rxBytes,
+             m_txBytes,
+             m_totalTime,
+             m_connections);
+    auto rc = ::write(fd, tmpBuf, strlen(tmpBuf));
+    if (rc !=  strlen(tmpBuf)) {
+        Log(LogSeverity::Warn, "Error writing audit log %d=%d", rc, errno);
+    }
+}
+
 const std::string& UserStats::GetUserName() {
     return m_userName;
 }
-
-void UserStats::DumpUserStats() {
-    for (auto& stat : m_stats) {
-        stat.Print();
+void UserStats::LogToFile()
+{
+    // Don't log stats for users who haven't connected in this period
+    if (m_stats.size() == 0) {
+        return;
     }
+
+    char fileName[256];
+    snprintf(fileName, sizeof(fileName), "%s_%d.csv", m_userName.c_str(), s_logNumber);
+    Log(LogSeverity::Debug, "Opening file %s for logging", fileName);
+    auto fd = ::open(fileName, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWUSR);
+    if (fd < 0) {
+        Log(LogSeverity::Warn, "Error opening log file for write %d(%s)", errno, strerror(errno));
+        return;
+    }
+    constexpr auto* headerString = "host,rxBytes,txBytes,totalTime,connections\n";
+
+    auto rc = ::write(fd, headerString, strlen(headerString));
+    if (rc == -1) {
+        Log(LogSeverity::Warn, "Error writing log header");
+        ::close(fd);
+        return;
+    }
+
+    for (auto& stat : m_stats) {
+        stat.LogToFile(fd);
+    }
+
+    ::close(fd);
 }
 
 int UserStats::GetStatCount() {
     return m_stats.size();
+}
+
+GlobalStats::GlobalStats()
+{
+    m_lastLogTime = Timestamp();
 }
 
 GlobalStats& GlobalStats::Instance() {
@@ -272,15 +343,29 @@ SiteStats& GlobalStats::GetStats(const std::string& username, const std::string&
 void GlobalStats::DumpUserStats(const std::string& username) {
     for (auto& stat : m_userStats) {
         if (stat.GetUserName() == username) {
-            stat.DumpUserStats();
+            stat.LogToFile();
             return;
         }
     }
 }
 
 void GlobalStats::LogAndReset() {
+    m_lastLogTime = Timestamp();
+
     for (auto& stat : m_userStats) {
-        stat.DumpUserStats();
+        stat.LogToFile();
     }
+
     m_userStats.clear();
+    s_logNumber++;
+    if (s_logNumber > m_logPersistence) {
+        s_logNumber = 0;
+    }
+}
+
+bool GlobalStats::ReadyToLog() {
+    if ((Timestamp() - m_lastLogTime) > (1000 * m_logFrequency)) {
+        return true;
+    }
+    return false;
 }

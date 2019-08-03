@@ -8,6 +8,7 @@ set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} ${TARGET_LINKER_FLAGS}")
 
 set(TARGET_SRC
     AsyncMessenger.cpp
+    BlackList.cpp
     ClientSocket.cpp
     CommandSocket.cpp
     ConfigFile.cpp
@@ -15,8 +16,10 @@ set(TARGET_SRC
     HostResolver.cpp
     Log.cpp
     main.cpp
+    Policy.cpp
     ProxyConnector.cpp
     ServerSocket.cpp
+    Session.cpp
     SocketManager.cpp
     Timestamp.cpp
     UserAuth.cpp
@@ -24,6 +27,7 @@ set(TARGET_SRC
 
 set(TARGET_INCLUDE
     AsyncMessenger.hpp
+    BlackList.hpp
     ClientSocket.hpp
     CommandSocket.hpp
     ConfigFile.hpp
@@ -33,6 +37,7 @@ set(TARGET_INCLUDE
     Log.hpp
     ProxyConnector.hpp
     ServerSocket.hpp
+    Session.hpp
     SocketManager.hpp
     Timestamp.hpp
     UserAuth.hpp

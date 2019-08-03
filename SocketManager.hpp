@@ -17,6 +17,15 @@ public:
     bool ProcessSockets();
 
 private:
+    static constexpr auto m_maxConcurrentConnections = 256;
+    static constexpr auto m_eventsToProcess = 10;
+    static constexpr auto m_epollTimeout = 100; // ms
+
+    void PruneExcessConnections();
+    bool HandleServerSocketRead(IGenericSocket* socket);
+    bool HandleClientSocketRead(IGenericSocket* socket);
+    bool HandleCommandSocketRead(IGenericSocket* socket);
+
     std::list<std::unique_ptr<IGenericSocket>> m_sockets;
 
     int m_epollFd;
