@@ -26,6 +26,7 @@ bool UserPolicy::GetDomain(int idx, std::string& domain) {
             return true;
         }
     }
+    return false;
 }
 
 void UserPolicyList::AddPolicy(std::unique_ptr<UserPolicy> policy) {
