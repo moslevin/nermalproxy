@@ -21,6 +21,7 @@ set(TARGET_SRC
     ServerSocket.cpp
     Session.cpp
     SocketManager.cpp
+    TimeMap.cpp
     Timestamp.cpp
     UserAuth.cpp
     )
@@ -39,6 +40,7 @@ set(TARGET_INCLUDE
     ServerSocket.hpp
     Session.hpp
     SocketManager.hpp
+    TimeMap.hpp
     Timestamp.hpp
     UserAuth.hpp
     )

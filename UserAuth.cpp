@@ -1,5 +1,6 @@
 #include "UserAuth.hpp"
 
+#include <ctime>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@
 
 #include "Log.hpp"
 #include "Timestamp.hpp"
+
 
 namespace {
 int s_logNumber = 0;
@@ -50,6 +52,10 @@ bool User::HasIpList() const {
 
 std::vector<std::string> User::GetIpList() const {
     return m_ipList;
+}
+
+WeeklyAccess& User::GetWeeklyAccess() {
+    return m_weeklyAccess;
 }
 
 AuthManager& AuthManager::Instance() {
@@ -133,8 +139,54 @@ bool AuthManager::Authenticate(const std::string& base64Creds, std::string& user
         if (rc) {
             username = userString;
         }
-        return rc;
+        return true;
     }
+    return false;
+}
+
+bool AuthManager::AccessAllowedAtTime(const std::string &username) {
+    auto now = time(0);
+    auto* localTime = localtime(&now);
+    for (auto& user: m_users) {
+        if (user.GetName() == username) {
+            if (localTime) {
+                auto& access = user.GetWeeklyAccess();
+                return access.PermittedAtTime(localTime->tm_wday, localTime->tm_hour, localTime->tm_min);
+            }
+        }
+    }
+    return false;
+}
+
+bool AuthManager::SetWeeklyAccess(const std::string &userName, const std::string &day, const std::string &initString) {
+    for (auto& user : m_users) {
+        if (user.GetName() == userName) {
+            auto& access = user.GetWeeklyAccess();
+            int dayIdx = 0;
+            if (day == "sun") {
+                dayIdx = 0;
+            } else if (day == "mon") {
+                dayIdx = 1;
+            } else if (day == "tue") {
+                dayIdx = 2;
+            } else if (day == "wed") {
+                dayIdx = 3;
+            } else if (day == "thr") {
+                dayIdx = 4;
+            } else if (day == "fri") {
+                dayIdx = 5;
+            } else if (day == "sat") {
+                dayIdx = 6;
+            } else {
+                Log(LogSeverity::Warn, "Invalid day");
+                return false;
+            }
+
+            Log(LogSeverity::Debug, "Adding policy for user %s, day %d", userName.c_str(), dayIdx);
+            return access.InitDayFromString(dayIdx, initString);
+        }        
+    }
+    Log(LogSeverity::Warn, "Invalid User");
     return false;
 }
 

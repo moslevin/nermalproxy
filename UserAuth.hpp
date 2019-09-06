@@ -4,7 +4,10 @@
 #include <string.h>
 #include <list>
 #include <vector>
+#include <ctime>
+
 #include "Log.hpp"
+#include "TimeMap.hpp"
 
 class User {
 public:
@@ -16,11 +19,13 @@ public:
     const std::string& GetPassword() const;
     bool HasIpList() const;
     std::vector<std::string> GetIpList() const;
+    WeeklyAccess& GetWeeklyAccess();
 
 private:
     std::vector<std::string> m_ipList;
     std::string m_name;
     std::string m_password;
+    WeeklyAccess m_weeklyAccess;
     bool m_audit;
 };
 
@@ -31,12 +36,14 @@ public:
     void SetEnabled(bool enable);
     bool IsEnabled();
 
-    bool IsAuditEnabled(const std::string& user);
-    void SetAudit(const std::string& user, bool audit);
-    void AddUser(const std::string& user, const std::string& password);
-    void AddUserIp(const std::string& user, const std::string& ip);
+    bool IsAuditEnabled(const std::string& username);
+    void SetAudit(const std::string& username, bool audit);
+    void AddUser(const std::string& username, const std::string& password);
+    void AddUserIp(const std::string& username, const std::string& ip);
     bool AuthenticateIp(const std::string& ipAddress, std::string& username);
     bool Authenticate(const std::string& base64Creds, std::string& username);
+    bool AccessAllowedAtTime(const std::string& username);
+    bool SetWeeklyAccess(const std::string& user, const std::string& day, const std::string& initString);
 
 private:
 

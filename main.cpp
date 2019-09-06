@@ -21,6 +21,7 @@
 #include "BlackList.hpp"
 #include "ConfigFile.hpp"
 #include "Policy.hpp"
+#include "TimeMap.hpp"
 
 namespace {
 
@@ -152,6 +153,22 @@ void DoConfig() {
                 AuthManager::Instance().SetAudit(attr->GetName(), true);
             }
 
+            // See if there are time-based access policies configured for the user
+            auto& timeAccessAttr = policyConfig.GetAttribute("time_based_policy");
+            if (timeAccessAttr.GetValue() == "enabled") {
+                Log(LogSeverity::Debug, "Enabling time-based access policy for user %s", attr->GetName().c_str());
+
+                std::vector<std::string> dayStrings = {"sun", "mon", "tue", "wed", "thr", "fri", "sat"};
+
+                for (auto&& day : dayStrings) {
+                    auto& dayAccessAttr = policyConfig.GetAttribute(day);
+                    Log(LogSeverity::Debug, "Found policy for day %s: %s", day.c_str(), dayAccessAttr.GetValue().c_str());
+
+                    if (dayAccessAttr.GetValue() != "") {
+                        AuthManager::Instance().SetWeeklyAccess(attr->GetName(), day, dayAccessAttr.GetValue());
+                    }
+                }
+            }
             // Move policy to the global policy list.
             UserPolicyList::Instance().AddPolicy(std::move(policy));
         }

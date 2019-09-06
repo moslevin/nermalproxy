@@ -174,13 +174,21 @@ bool SocketManager::HandleCommandSocketRead(IGenericSocket* socket)
                     auto rc = sscanf(authString, "Proxy-Authorization: Basic %1024s", rawCreds);
                     free(dupString);
 
+                    auto userName = std::string{};
                     if (rc == 1) {
                         auto credString = std::string{rawCreds};
-                        auto userName = std::string{};
 
                         canConnect = AuthManager::Instance().Authenticate(credString, userName);
+
                         if (canConnect) {
                             session->SetUserName(userName);
+                        }
+                    }
+
+                    if (canConnect) {
+                        canConnect = AuthManager::Instance().AccessAllowedAtTime(userName);
+                        if (!canConnect) {
+                            Log(LogSeverity::Debug, "Rejecting connection due to time-based access controls");
                         }
                     }
 
@@ -203,8 +211,20 @@ bool SocketManager::HandleCommandSocketRead(IGenericSocket* socket)
                     Log(LogSeverity::Debug, "Attempt authentication via IP");
 
                     if (AuthManager::Instance().AuthenticateIp(clientIp, username)) {
-                        Log(LogSeverity::Debug, "Authenticated as %s via IP", username.c_str());
-                        session->SetUserName(username);
+                        if (AuthManager::Instance().AccessAllowedAtTime(username)) {
+                            Log(LogSeverity::Debug, "Authenticated as %s via IP", username.c_str());
+                            session->SetUserName(username);
+                        } else {
+                            Log(LogSeverity::Debug, "Rejecting connection due to time-based access controls");
+                            const char* authMessage =
+                                    "HTTP/1.0 403 Forbidden\n"
+                                    "Connection: close\r\n"
+                                    "\r\n";
+                            auto nwritten = ::write(session->GetClientFd(), authMessage, strlen(authMessage));
+                            ::close(session->GetClientFd());
+                            SessionManager::Instance().EndSession(msg.data.hostDetectResult.sessionId);
+                            return true;
+                        }
                     } else {
                         Log(LogSeverity::Debug, "Not authenticated - force retry", session->GetRequest().c_str());
                         const char* authMessage =
