@@ -1,3 +1,34 @@
+/**
+ *
+ * NermalProxy
+ *
+ * Copyright 2019 Mark Slevinsky
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list
+ * of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this
+ * list of conditions and the following disclaimer in the documentation and/or other
+ * materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may
+ * be used to endorse or promote products derived from this software without specific
+ * prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <memory>
 #include <signal.h>
 #include <unistd.h>
@@ -43,31 +74,37 @@ void Daemonize() {
         exit(-1);
     }
 
+    // Ignore signals that would otherwise cause us exit.
     signal(SIGHUP, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
 
     // ToDo -- chdir + umask?
 
+    // Close all open file handles
     for (auto i = 0; i < sysconf(_SC_OPEN_MAX); i++) {
         close(i);
     }
+
+    // Re-open stdin/stdout/stderr as /dev/null
     stdin = fopen("/dev/null", "r");
     stdout = fopen("/dev/null", "w+");
     stderr = fopen("/dev/null", "w+");
 }
 
-void DoConfig() {
-    auto config = ConfigFile{"test.conf"};
+void DoConfig(const std::string& filename) {
+    auto config = ConfigFile{filename.c_str()};
     config.LoadData();
 
     // Load general proxy settings
     auto proxyConfig = config.GetSection("Proxy");
 
+    // If the deamon_mode option is specified, daemonize the process immediately.
     auto daemonize = proxyConfig.GetAttribute("daemon_mode");
     if (daemonize.GetValue() == "enabled") {
         Daemonize();
     }
 
+    // Check for global logging verbosity option and apply
     auto& logVerbosity = proxyConfig.GetAttribute("log_verbosity");
     if (logVerbosity.GetValue() != "") {
         if (logVerbosity.GetValue() == "debug") {
@@ -83,24 +120,28 @@ void DoConfig() {
         }
     }
 
+    // Enable log-redirection to file
     auto& logToFile = proxyConfig.GetAttribute("log_to_file");
     if (logToFile.GetValue() == "enabled") {
         Log(LogSeverity::Debug, "Store logs to file enabled");
         LogStoreToDisk(true);
     }
 
+    // Override default proxy port
     auto& proxyPort = proxyConfig.GetAttribute("port");
     if (proxyPort.GetValue() != "") {
         g_serverPort = std::uint16_t(std::stoul(proxyPort.GetValue()));
         Log(LogSeverity::Debug, "Setting proxy port=%d", g_serverPort);
     }
+
+    // Enable authentication by IP or user/password
     auto& proxyAuthEnabled = proxyConfig.GetAttribute("auth");
     if (proxyAuthEnabled.GetValue() == "enabled") {
         Log(LogSeverity::Debug, "Enabling proxy authentication");
         g_authEnabled = true;
     }
 
-    // Load the domain files first...
+    // Load the domain-filtering files
     auto domainConfig = config.GetSection("DomainFiles");
     MultiValueAttribute* attr = nullptr;
     auto idx = 0;
@@ -140,6 +181,7 @@ void DoConfig() {
                 }
             }
 
+            // Specify IP addresses corresponding to the specific user
             auto& ipAttr = policyConfig.GetAttribute("ip_list");
             auto ipValue = std::string{};
             auto ipIdx = 0;
@@ -147,6 +189,7 @@ void DoConfig() {
                 AuthManager::Instance().AddUserIp(attr->GetName(), ipValue);
             }
 
+            // enable audit logging for the user
             auto& auditAttr = policyConfig.GetAttribute("audit");
             if (auditAttr.GetValue() == "enabled") {
                 Log(LogSeverity::Debug, "Auditing enabled for user: %s", attr->GetName().c_str());
@@ -174,7 +217,7 @@ void DoConfig() {
         }
     }
 
-    // Add the default policy...
+    // Add the default policy that is applied to users
     auto& globalDomains = proxyConfig.GetAttribute("global_domains");
     auto globalPolicy = std::make_unique<UserPolicy>("<global>");
     auto globalDomainValue = std::string{};
@@ -187,10 +230,24 @@ void DoConfig() {
 }
 } // anonymous namespace
 
-int main(void)
+int main(int argc, char** argv)
 {
-    DoConfig();
+    auto configFile = std::string{"default.conf"};
 
+    // user can override config file w/command-line argument, otherwise attempt to load
+    // default.conf
+    if (argc >= 2) {
+        if (0 != access(argv[1], F_OK)) {
+            fprintf(stderr, "config file %s does not exist\n", argv[1]);
+            return -1;
+        }
+        configFile = std::string{argv[1]};
+    }
+
+    // Load config file (if config file is not loaded, use default config)
+    DoConfig(configFile);
+
+    // Create the objects required to manage the sockets
     auto proxyConnector = std::make_unique<ProxyConnector>();
     auto socketManager = std::make_unique<SocketManager>(std::move(proxyConnector));
     if (!socketManager->Initialize()) {
@@ -198,6 +255,7 @@ int main(void)
         return -1;
     }
 
+    // Create the object implementing the server (incoming connections from clients)
     auto server = std::make_unique<ServerSocket>();
     if (!server->Initialize(g_serverPort)) {
         Log(LogSeverity::Error, "Failed to initialize server");
@@ -205,9 +263,11 @@ int main(void)
     }
     socketManager->AddSocket(std::move(server));
 
+    // Creat the object that handles local IPC requests/responses in a thread-safe way
     auto commandSocket = std::make_unique<CommandSocket>();
     socketManager->AddSocket(std::move(commandSocket));
 
+    // Ignore broken pipe signals -- process exits otherwise...
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;
     sa.sa_flags = 0;
@@ -216,6 +276,7 @@ int main(void)
         return -1;
     }
 
+    // Main processing loop for sockets -- won't return unless there's an error.
     while (socketManager->ProcessSockets()) {
         // Do nothing
     }

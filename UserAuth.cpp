@@ -1,3 +1,34 @@
+/**
+ *
+ * NermalProxy
+ *
+ * Copyright 2019 Mark Slevinsky
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list
+ * of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this
+ * list of conditions and the following disclaimer in the documentation and/or other
+ * materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may
+ * be used to endorse or promote products derived from this software without specific
+ * prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "UserAuth.hpp"
 
 #include <ctime>
@@ -33,6 +64,10 @@ void User::AddIp(const std::string& ipAddress) {
 
 void User::SetAudit(bool audit) {
     m_audit = audit;
+}
+
+bool User::GetAudit() const {
+    return m_audit;
 }
 
 const std::string& User::GetName() const {
@@ -72,7 +107,12 @@ bool AuthManager::IsEnabled() {
 }
 
 bool AuthManager::IsAuditEnabled(const std::string &username) {
-
+    for (auto& user: m_users) {
+        if (user.GetName() == username) {
+            return user.GetAudit();
+        }
+    }
+    return false;
 }
 
 void AuthManager::SetAudit(const std::string& username, bool audit)
@@ -96,14 +136,11 @@ void AuthManager::AddUserIp(const std::string& username, const std::string& ipAd
 }
 
 bool AuthManager::AuthenticateIp(const std::string& ipAddress, std::string& username) {
-    Log(LogSeverity::Debug, "%s: enter", __func__);
+    Log(LogSeverity::Verbose, "%s: enter", __func__);
     for (auto& user: m_users) {
-        Log(LogSeverity::Debug, "%s: User=%s", __func__, user.GetName().c_str());
         if (user.HasIpList()) {
-            Log(LogSeverity::Debug, "%s: ... has an IP list", __func__);
             auto ipList = user.GetIpList();
             for (auto& ip : ipList) {
-                Log(LogSeverity::Debug, "%s: Check IP=%s", __func__, ip.c_str());
                 if (ip == ipAddress) {
                     Log(LogSeverity::Debug, "%s: Match -- auth by IP Ok", __func__, ip.c_str());
                     username = user.GetName();

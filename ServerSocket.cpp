@@ -1,7 +1,39 @@
+/**
+ *
+ * NermalProxy
+ *
+ * Copyright 2019 Mark Slevinsky
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list
+ * of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this
+ * list of conditions and the following disclaimer in the documentation and/or other
+ * materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may
+ * be used to endorse or promote products derived from this software without specific
+ * prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "ServerSocket.hpp"
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/sockios.h>
 #include <netdb.h>
 #include <sys/epoll.h>
@@ -64,7 +96,7 @@ bool ServerSocket::Initialize(std::uint16_t port) {
         return false;
     }
 
-    rc = ::listen(sfd, 10);
+    rc = ::listen(sfd, 16);
     if (rc < 0) {
         Log(LogSeverity::Debug, "error on listen");
         return false;
@@ -99,6 +131,14 @@ int ServerSocket::Accept(std::string& clientIp) {
 
     Log(LogSeverity::Debug, "Peer IP address: %s\n", clientIpBuf);
     clientIp = std::string(clientIpBuf);
+
+    // Set a timeout on the socket when reading/writing to prevent getting stuck waiting for
+    // data on an idle socket.
+    struct timeval timeout = {};
+    timeout.tv_sec = 10;
+    timeout.tv_usec = 0;
+    ::setsockopt(clifd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+    ::setsockopt(clifd, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
 
     return clifd;
 }
