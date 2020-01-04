@@ -89,31 +89,10 @@ void sendErrorResponse(int sessionId_) {
 }
 
 bool isAllowed(Session* session_) {
-    int idx = 0;
-    bool allowed = true;
-    std::string domain;
-
-    while (UserPolicyList::Instance().GetUserDomain(idx++, session_->GetUserName(), domain)) {
-        if (!BlacklistList::Instance().IsAllowedInList(domain, session_->GetHost())) {
-            Log(LogSeverity::Debug, "host %s not allowed in domain %s", session_->GetHost().c_str(), domain.c_str());
-            allowed = false;
-            break;
-        }
+    if (AuthManager::Instance().HostAllowed(session_->GetUserName(), session_->GetHost())) {
+        return true;
     }
-
-    idx = 0;
-    if (allowed) {
-        auto globalDomain = std::string{"<global>"};
-        while (UserPolicyList::Instance().GetUserDomain(idx++, globalDomain, domain)) {
-            if (!BlacklistList::Instance().IsAllowedInList(domain, session_->GetHost())) {
-                Log(LogSeverity::Debug, "host %s not allowed in domain %s", session_->GetHost().c_str(), domain.c_str());
-                allowed = false;
-                break;
-            }
-        }
-    }
-
-    return allowed;
+    return false;
 }
 
 void asyncConnector(void* ctx) {

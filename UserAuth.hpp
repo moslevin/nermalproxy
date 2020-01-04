@@ -31,6 +31,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <set>
 #include <string>
 #include <string.h>
 #include <list>
@@ -48,18 +50,35 @@
 class User {
 public:
     User(const std::string& name, const std::string& password);
-    void AddIp(const std::string& ipAddress);
-    void SetAudit(bool audit);
 
+    // Credentials
     const std::string& GetName() const;
     const std::string& GetPassword() const;
+
+    // Log Auditing
+    void SetAudit(bool audit);
     bool GetAudit() const;
+
+    // IP/User mappings
+    void AddIp(const std::string& ipAddress);
     bool HasIpList() const;
-    std::vector<std::string> GetIpList() const;
+    std::set<std::string> GetIpList();
+
+    // Port whitelist
+    void AddPort(const std::uint16_t port);
+    bool HasPortList() const;
+    std::set<std::uint16_t> GetPortList();
+
+    // Domain blacklist
+    void AddDomain(const std::string& domain);
+    bool GetDomain(int idx, std::string& domain);
+
     WeeklyAccess& GetWeeklyAccess();
 
 private:
-    std::vector<std::string> m_ipList;
+    std::set<std::string> m_ipList;
+    std::list<std::string> m_domains;
+    std::set<std::uint16_t> m_portList;
     std::string m_name;
     std::string m_password;
     WeeklyAccess m_weeklyAccess;
@@ -84,7 +103,9 @@ public:
     bool AuthenticateIp(const std::string& ipAddress, std::string& username);
     bool Authenticate(const std::string& base64Creds, std::string& username);
     bool AccessAllowedAtTime(const std::string& username);
-    bool SetWeeklyAccess(const std::string& user, const std::string& day, const std::string& initString);
+    bool PortAllowed(const std::string& username, const std::uint16_t port) const;
+    bool HostAllowed(const std::string& username, const std::string& host) const;
+    bool SetWeeklyAccess(const std::string& username, const std::string& day, const std::string& initString);
 
 private:
 

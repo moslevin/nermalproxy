@@ -42,9 +42,9 @@
 #include <list>
 #include <vector>
 
+#include "BlackList.hpp"
 #include "Log.hpp"
 #include "Timestamp.hpp"
-
 
 namespace {
 int s_logNumber = 0;
@@ -59,7 +59,7 @@ User::User(const std::string& name, const std::string& password)
 {}
 
 void User::AddIp(const std::string& ipAddress) {
-    m_ipList.emplace_back(ipAddress);
+    m_ipList.emplace(ipAddress);
 }
 
 void User::SetAudit(bool audit) {
@@ -85,7 +85,40 @@ bool User::HasIpList() const {
     return false;
 }
 
-std::vector<std::string> User::GetIpList() const {
+void User::AddDomain(const std::string& domain) {
+    m_domains.emplace_back(domain);
+}
+
+bool User::GetDomain(int idx, std::string& domain) {
+    if (idx >= m_domains.size()) {
+        return false;
+    }
+    auto i = 0;
+    for (auto it = m_domains.begin(); it != m_domains.end(); it++, i++) {
+        if (i == idx) {
+            domain = *it;
+            return true;
+        }
+    }
+    return false;
+}
+
+void User::AddPort(const std::uint16_t port) {
+    m_portList.emplace(port);
+}
+
+bool User::HasPortList() const {
+    if (m_portList.size() != 0) {
+        return true;
+    }
+    return false;
+}
+
+std::set<std::uint16_t> User::GetPortList() {
+    return m_portList;
+}
+
+std::set<std::string> User::GetIpList() {
     return m_ipList;
 }
 
@@ -123,6 +156,7 @@ void AuthManager::SetAudit(const std::string& username, bool audit)
         }
     }
 }
+
 void AuthManager::AddUser(const std::string& user, const std::string& password) {
     m_users.emplace_back(User{user, password});
 }
@@ -139,7 +173,7 @@ bool AuthManager::AuthenticateIp(const std::string& ipAddress, std::string& user
     Log(LogSeverity::Verbose, "%s: enter", __func__);
     for (auto& user: m_users) {
         if (user.HasIpList()) {
-            auto ipList = user.GetIpList();
+            auto& ipList = user.GetIpList();
             for (auto& ip : ipList) {
                 if (ip == ipAddress) {
                     Log(LogSeverity::Debug, "%s: Match -- auth by IP Ok", __func__, ip.c_str());
@@ -193,6 +227,37 @@ bool AuthManager::AccessAllowedAtTime(const std::string &username) {
         }
     }
     return false;
+}
+
+bool AuthManager::PortAllowed(const std::string& username, const uint16_t port) const {
+    for (auto& user: m_users) {
+        if (user.GetName() == username) {
+            if (user.HasPortList()) {
+                auto& ports = user.GetPortList();
+                if (ports.find(port) == ports.end()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+    return true;
+}
+
+bool AuthManager::HostAllowed(const std::string &username, const std::string &host) const {
+    std::string domain;
+    for (auto it = m_users.begin(); it != m_users.end(); it++) {
+        if ((it->GetName() == username) || (it->GetName() == "<global>")) {
+            auto domainIdx = 0;
+            while (it->GetDomain(domainIdx, domain)) {
+                if (!BlackListList::Instance().IsAllowedInList(domain, host)) {
+                    Log(LogSeverity::Debug, "host %s not allowed in domain %s", session_->GetHost().c_str(), domain.c_str());
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 bool AuthManager::SetWeeklyAccess(const std::string &userName, const std::string &day, const std::string &initString) {
