@@ -31,6 +31,10 @@
 
 #include "SocketManager.hpp"
 
+#include <fcntl.h>
+#include <linux/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -123,6 +127,37 @@ bool SocketManager::HandleServerSocketRead(IGenericSocket* socket)
     if (clientFd < 0) {
         Log(LogSeverity::Debug, "Error accepting client");
         return false;
+    }
+
+    // Enable TCP keepalives and idle timeout detection on client-to-proxy communications
+
+    auto enable = 1;
+    auto rc         = setsockopt(clientFd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(enable));
+    if (rc != 0) {
+        printf("Error enabling socket keepalives on client\n");
+    }
+
+    // Set the timing parameters for dead "Idle" socket checks.
+
+    // Check for dead idle connections on 10s of inactivity
+    auto idleTime = 10;
+    rc           = setsockopt(clientFd, SOL_TCP, TCP_KEEPIDLE, &idleTime, sizeof(idleTime));
+    if (rc != 0) {
+        printf("Error setting initial idle-time value\n");
+    }
+
+    // Set a maximum number of idle-socket heartbeat attemtps before assuming an idle socket it dead
+    auto keepCount = 5;
+    rc            = setsockopt(clientFd, SOL_TCP, TCP_KEEPCNT, &keepCount, sizeof(keepCount));
+    if (rc != 0) {
+        printf("Error setting idle retry count\n");
+    }
+
+    // On performing the socket-idle check, send heartbeat attempts on a specified interval
+    auto keepInterval = 5;
+    rc               = setsockopt(clientFd, SOL_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(keepInterval));
+    if (rc != 0) {
+        printf("Error setting idle retry interval\n");
     }
 
     // Check to see if clientIp has an active user session...
